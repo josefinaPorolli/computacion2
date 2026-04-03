@@ -1,8 +1,6 @@
-import sys
+import argparse
 
-if(len(sys.argv) < 2):
-    print("Uso: python saludo.py <nombre>")
-    sys.exit(1)
-
-nombre = sys.argv[1]
-print(f"Hola, {nombre}!")
+parser = argparse.ArgumentParser(description="Saluda a una persona.")
+parser.add_argument("nombre", help="Nombre de la persona")
+args = parser.parse_args()
+print(f"Hola, {args.nombre}!")

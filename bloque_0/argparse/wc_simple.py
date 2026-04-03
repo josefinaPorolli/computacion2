@@ -1,12 +1,9 @@
-# Creá wc_simple.py (inspirado en el comando wc de Unix) que cuente las líneas de un archivo. El programa recibe el nombre del archivo como argumento
+import argparse
 
-import sys
-
-if(len(sys.argv) < 2):
-    print("Uso: python3 wc_simple.py <nombre_archivo>")
-    sys.exit(1)
-
-archivo = sys.argv[1]
+parser = argparse.ArgumentParser(description="Cuenta líneas de un archivo (inspirado en wc).")
+parser.add_argument("archivo", help="Archivo a contar")
+args = parser.parse_args()
+archivo = args.archivo
 try:
     with open(archivo, 'r') as f: # r de "read"
         lineas = f.readlines() # readlines() devuelve una lista con cada línea del archivo como un elemento

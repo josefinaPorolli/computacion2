@@ -1,12 +1,6 @@
-import sys
-    
-numeros = sys.argv[1:]
-suma = 0
-for num in numeros:
-    try:
-        suma += float(num)
-    except ValueError:
-        print(f"'{num}' no es un número válido.")
-        sys.exit(1)
+import argparse
 
-print(f"La suma es: {suma}")
+parser = argparse.ArgumentParser(description="Suma números.")
+parser.add_argument("numeros", nargs="+", type=float, help="Números a sumar")
+args = parser.parse_args()
+print(f"La suma es: {sum(args.numeros)}")
