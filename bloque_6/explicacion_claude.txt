@@ -1,0 +1,55 @@
+Value sin lock
+
+se crea Value('i', 0) con MAP_SHARED antes del fork
+fork() → todos los procesos apuntan a la misma página física
+P0 lee → 41
+P1 lee → 41 (antes de que P0 escriba)
+P0 escribe → 42
+P1 escribe → 42 (sobreescribe con lo que leyó antes)
+se pierden iteraciones
+
+
+Value con lock
+
+se crea Value('i', 0) con MAP_SHARED antes del fork
+fork() → todos los procesos apuntan a la misma página física
+P0 adquiere el lock → P1 espera bloqueado
+P0 lee → 41
+P0 suma → 42
+P0 escribe → 42
+P0 suelta el lock
+P1 adquiere el lock → lee 42 → suma → escribe 43 → suelta
+no se pierden iteraciones
+
+
+mmap no compartida (MAP_PRIVATE)
+
+se crea el mmap con MAP_PRIVATE antes del fork
+fork() → hijo y padre apuntan a la misma página (COW lazy)
+cualquiera escribe → kernel le da una página nueva solo a ese proceso
+cada proceso vive en su propio mundo
+no se pierden iteraciones pero tampoco se comparte nada
+
+
+mmap compartida sin lock (MAP_SHARED)
+
+se crea el mmap con MAP_SHARED antes del fork
+fork() → todos apuntan a la misma página física, sin COW
+P0 lee → 41
+P1 lee → 41 (antes de que P0 escriba)
+P0 escribe → 42
+P1 escribe → 42 (sobreescribe con lo que leyó antes)
+se pierden iteraciones
+
+
+mmap compartida con lock (MAP_SHARED + flock)
+
+se crea el mmap con MAP_SHARED antes del fork
+fork() → todos apuntan a la misma página física, sin COW
+P0 adquiere flock → P1 espera bloqueado
+P0 lee → 41
+P0 suma → 42
+P0 escribe → 42
+P0 suelta el lock
+P1 adquiere flock → lee 42 → suma → escribe 43 → suelta
+no se pierden iteraciones
