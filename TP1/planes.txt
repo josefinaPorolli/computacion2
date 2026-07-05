@@ -1,0 +1,23 @@
+proceso-monitor/
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── config.json
+├── README.md
+├── src/
+│   ├── main.py
+│   ├── recolector.py
+│   ├── agregador.py
+│   ├── display.py
+│   ├── procfs.py
+│   ├── manejador_senales.py
+│   └── analizadores/
+│       ├── __init__.py
+│       ├── resumen.py
+│       ├── memoria.py
+│       ├── fds.py
+│       ├── threads.py
+│       ├── senales.py
+│       ├── scheduling.py
+│       └── sistema.py
+└── tests/

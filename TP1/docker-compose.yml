@@ -1,0 +1,38 @@
+services:
+  monitor:
+    build: .
+    image: proceso-monitor
+    container_name: proceso-monitor
+
+    # Imprescindible para la TUI (curses/rich necesitan una terminal real)
+    tty: true
+    stdin_open: true
+
+    # Acceso de solo lectura a /proc del host
+    # Sin esto solo ves los procesos dentro del contenedor (muy pocos)
+    volumes:
+      - /proc:/proc:ro    # ya lo vimos: monta el /proc de tu máquina adentro del contenedor
+      - ./src:/app/src    # monta tu carpeta src/ local en /app/src del contenedor
+
+    # Necesario para leer /proc/<pid>/fd de otros procesos
+    pid: host
+
+    # Para que /proc/net y algunas lecturas de sistema funcionen bien
+    # No es root total, pero sí permite leer lo que necesitamos
+    cap_add:
+      - SYS_PTRACE
+
+    # El código fuente montado como volumen: editás en tu máquina,
+    # los cambios se reflejan sin reconstruir la imagen
+    # Comentalo cuando quieras testear la imagen "pura"
+    # volumes:
+    #   - ./src:/app/src
+
+    # Variables de entorno opcionales
+    environment:
+      - TERM=xterm-256color
+      - PYTHONUNBUFFERED=1
+
+    # Para que Ctrl+C llegue bien al proceso Python
+    stop_signal: SIGINT
+    stop_grace_period: 5s
