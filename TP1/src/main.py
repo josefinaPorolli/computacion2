@@ -1,42 +1,44 @@
 """
-main.py temporal — prueba procfs.py
+main.py temporal — prueba el recolector corriendo como proceso hijo.
 """
-import os
+import time
+import multiprocessing as mp
 import sys
+import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from procfs import listar_pids, leer_stat, leer_status, leer_cmdline, nombre_usuario
+from recolector import recolector
+
 
 def main():
-    pid_propio = os.getpid()
-    print(f"=== Probando procfs.py con PID propio: {pid_propio} ===\n")
+    print(f"[main] Arrancando (PID {os.getpid()})")
 
-    # 1. listar_pids
-    pids = listar_pids()
-    print(f"listar_pids(): {len(pids)} procesos encontrados")
-    print(f"  Primeros 5: {sorted(pids)[:5]}\n")
+    # Creamos los objetos de comunicación
+    queue_pids  = mp.Queue()
+    evento_stop = mp.Event()
 
-    # 2. leer_stat
-    stat = leer_stat(pid_propio)
-    print(f"leer_stat({pid_propio}):")
-    for k, v in stat.items():
-        print(f"  {k}: {v}")
-    print()
+    # Lanzamos el recolector como proceso hijo
+    proceso = mp.Process(
+        target=recolector,
+        args=(queue_pids, 2.0, evento_stop),
+        name="recolector"
+    )
+    proceso.start()
+    print(f"[main] Recolector lanzado (PID {proceso.pid})")
 
-    # 3. leer_status
-    status = leer_status(pid_propio)
-    print(f"leer_status({pid_propio}) — algunos campos:")
-    for k in ('VmRSS', 'VmSize', 'Threads', 'Uid', 'voluntary_ctxt_switches'):
-        print(f"  {k}: {status.get(k)}")
-    print()
+    # Leemos 3 snapshots de la queue y los mostramos
+    for i in range(3):
+        pids = queue_pids.get()  # espera hasta que haya algo
+        print(f"\n[main] Snapshot #{i+1}: {len(pids)} PIDs")
+        print(f"  Primeros 5: {sorted(pids)[:5]}")
+        print(f"  Últimos 5:  {sorted(pids)[-5:]}")
 
-    # 4. leer_cmdline
-    cmd = leer_cmdline(pid_propio)
-    print(f"leer_cmdline({pid_propio}): {cmd}\n")
+    # Le decimos al recolector que pare
+    print("\n[main] Mandando señal de stop...")
+    evento_stop.set()
+    proceso.join(timeout=5)
+    print("[main] Listo")
 
-    # 5. nombre_usuario
-    uid = status['Uid']['real']
-    print(f"nombre_usuario({uid}): {nombre_usuario(uid)}")
 
 if __name__ == "__main__":
     main()
