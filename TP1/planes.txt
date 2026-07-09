@@ -1,23 +1,23 @@
-proceso-monitor/
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── config.json
-├── README.md
+TP1/
+├── Dockerfile                 ← receta para construir el contenedor Linux
+├── docker-compose.yml         ← cómo correr el contenedor (volúmenes, permisos, TTY)
+├── requirements.txt           ← dependencias Python (solo rich)
+├── config.json                ← intervalos de refresco de cada vista
+├── README.md                  ← informe del TP
 ├── src/
-│   ├── main.py
-│   ├── recolector.py
-│   ├── agregador.py
-│   ├── display.py
-│   ├── procfs.py
-│   ├── manejador_senales.py
+│   ├── main.py                ← orquestador: crea Manager, lanza todos los procesos
+│   ├── recolector.py          ← lista PIDs de /proc y los manda a los analizadores
+│   ├── agregador.py           ← junta resultados en el snapshot global
+│   ├── display.py             ← TUI: muestra el snapshot al usuario
+│   ├── procfs.py              ← único archivo que toca /proc: parsea stat, status, cmdline
+│   ├── manejador_senales.py   ← handlers para SIGINT, SIGHUP, SIGUSR1, etc
 │   └── analizadores/
-│       ├── __init__.py
-│       ├── resumen.py
-│       ├── memoria.py
-│       ├── fds.py
-│       ├── threads.py
-│       ├── senales.py
-│       ├── scheduling.py
-│       └── sistema.py
-└── tests/
+│       ├── __init__.py        ← vacío, le dice a Python que esta carpeta es un paquete
+│       ├── resumen.py         ← CPU%, RSS, estado, threads, comando de cada proceso
+│       ├── memoria.py         ← VmRSS, VmSize, page faults, segmentos
+│       ├── fds.py             ← archivos abiertos por cada proceso
+│       ├── threads.py         ← LWPs, estado y CPU% de cada thread
+│       ├── senales.py         ← máscaras SigBlk, SigIgn, SigCgt, SigPnd
+│       ├── scheduling.py      ← nice, priority, policy, context switches
+│       └── sistema.py         ← CPU global, memoria total, load average
+└── tests/                     ← (opcional) tests unitarios del parseo de /proc

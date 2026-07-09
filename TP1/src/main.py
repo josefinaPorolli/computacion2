@@ -1,5 +1,5 @@
 """
-main.py temporal — prueba recolector + analizador de resumen juntos.
+main.py temporal — prueba recolector + resumen + memoria + fds juntos.
 """
 import time
 import multiprocessing as mp
@@ -9,62 +9,69 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from recolector import recolector
 from analizadores.resumen import resumen
+from analizadores.memoria import memoria
+from analizadores.fds import fds
 
 
 def main():
     print(f"[main] Arrancando (PID {os.getpid()})")
 
-    # El Manager crea el dict compartido entre procesos
     manager     = mp.Manager()
     snapshot    = manager.dict()
-
-    # Queue para que el recolector le mande PIDs al analizador
-    # maxsize=1: si el analizador no consumió el anterior, descartamos
-    queue_resumen = mp.Queue(maxsize=1)
-
-    # Value compartido para el intervalo del analizador (ajustable en runtime)
-    intervalo_resumen = mp.Value('d', 2.0)  # 'd' = double
-
-    # Event para shutdown limpio
     evento_stop = mp.Event()
 
-    # Lanzamos los procesos
-    p_recolector = mp.Process(
-        target=recolector,
-        args=(queue_resumen, 2.0, evento_stop),
-        name="recolector"
-    )
-    p_resumen = mp.Process(
-        target=resumen,
-        args=(queue_resumen, snapshot, intervalo_resumen, evento_stop),
-        name="resumen"
-    )
+    queue_resumen = mp.Queue(maxsize=1)
+    queue_memoria = mp.Queue(maxsize=1)
+    queue_fds     = mp.Queue(maxsize=1)
 
-    p_recolector.start()
-    p_resumen.start()
-    print(f"[main] Recolector PID: {p_recolector.pid}")
-    print(f"[main] Resumen    PID: {p_resumen.pid}")
+    intervalo_resumen = mp.Value('d', 2.0)
+    intervalo_memoria = mp.Value('d', 3.0)
+    intervalo_fds     = mp.Value('d', 5.0)
 
-    # Esperamos 3 ciclos y mostramos el snapshot
-    for i in range(3):
-        time.sleep(3)
-        datos = snapshot.get('resumen', {})
-        print(f"\n=== Snapshot #{i+1}: {len(datos)} procesos ===")
+    procesos = [
+        mp.Process(target=recolector, name="recolector",
+                   args=([queue_resumen, queue_memoria, queue_fds], 2.0, evento_stop)),
+        mp.Process(target=resumen, name="resumen",
+                   args=(queue_resumen, snapshot, intervalo_resumen, evento_stop)),
+        mp.Process(target=memoria, name="memoria",
+                   args=(queue_memoria, snapshot, intervalo_memoria, evento_stop)),
+        mp.Process(target=fds, name="fds",
+                   args=(queue_fds, snapshot, intervalo_fds, evento_stop)),
+    ]
 
-        # Mostramos los 5 procesos con más CPU
-        top5 = sorted(datos.values(), key=lambda p: p['cpu'], reverse=True)[:5]
-        print(f"{'PID':>6} {'NOMBRE':<16} {'EST':>3} {'CPU%':>6} {'RSS(kB)':>8} {'THREADS':>7}  COMANDO")
-        print("-" * 70)
+    for p in procesos:
+        p.start()
+        print(f"[main] {p.name} PID: {p.pid}")
+
+    time.sleep(6)
+
+    # Mostramos los 5 procesos con más FDs abiertos
+    datos_fds = snapshot.get('fds', {})
+    if datos_fds:
+        top5 = sorted(datos_fds.values(), key=lambda p: p['total'], reverse=True)[:5]
+        print(f"\n=== Top 5 procesos por FDs abiertos ===")
+        print(f"{'PID':>6}  {'TOTAL':>5}  {'ARCHIVOS':>8}  {'SOCKETS':>7}  {'PIPES':>5}  {'TTY':>3}")
+        print("-" * 50)
         for p in top5:
-            print(f"{p['pid']:>6} {p['nombre']:<16} {p['estado']:>3} "
-                  f"{p['cpu']:>6.1f} {p['rss']:>8} {p['threads']:>7}  "
-                  f"{p['cmdline'][:30]}")
+            c = p['conteo']
+            print(f"{p['pid']:>6}  {p['total']:>5}  "
+                  f"{c.get('archivo', 0):>8}  "
+                  f"{c.get('socket', 0):>7}  "
+                  f"{c.get('pipe', 0):>5}  "
+                  f"{c.get('tty', 0):>3}")
 
-    # Shutdown limpio
+        # Mostramos el detalle del proceso con más FDs
+        top1 = top5[0]
+        print(f"\n=== Detalle FDs de PID {top1['pid']} ===")
+        for fd in top1['fds'][:10]:  # primeros 10
+            print(f"  fd {fd['fd']:>3}  [{fd['tipo']:<11}]  {fd['destino'][:50]}")
+        if len(top1['fds']) > 10:
+            print(f"  ... y {len(top1['fds']) - 10} más")
+
     print("\n[main] Parando todo...")
     evento_stop.set()
-    p_recolector.join(timeout=5)
-    p_resumen.join(timeout=5)
+    for p in procesos:
+        p.join(timeout=5)
     manager.shutdown()
     print("[main] Listo")
 
