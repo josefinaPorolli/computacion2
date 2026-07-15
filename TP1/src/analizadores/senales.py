@@ -106,7 +106,7 @@ def analizar_senales(pid):
     }
 
 
-def senales(queue_pids, snapshot, intervalo_val, evento_stop):
+def senales(queue_pids, queue_agregador, intervalo_val, evento_stop):
     """
     Proceso analizador de señales.
     """
@@ -128,7 +128,7 @@ def senales(queue_pids, snapshot, intervalo_val, evento_stop):
             if datos is not None:
                 resultados[pid] = datos
 
-        snapshot['senales'] = resultados
+        queue_agregador.put(('senales', resultados))
         time.sleep(intervalo_val.value)
 
     print("[senales] Terminado")

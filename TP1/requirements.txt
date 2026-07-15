@@ -1,2 +1,3 @@
 # TUI
 rich==13.7.1
+readchar==4.0.5 # Manejo de teclado

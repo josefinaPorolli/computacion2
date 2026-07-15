@@ -146,7 +146,7 @@ def analizar_threads(pid, lecturas_anteriores):
     }
 
 
-def threads(queue_pids, snapshot, intervalo_val, evento_stop):
+def threads(queue_pids, queue_agregador, intervalo_val, evento_stop):
     """
     Proceso analizador de threads.
     """
@@ -177,7 +177,7 @@ def threads(queue_pids, snapshot, intervalo_val, evento_stop):
             if p in pids_set
         }
 
-        snapshot['threads'] = resultados
+        queue_agregador.put(('threads', resultados))
         time.sleep(intervalo_val.value)
 
     print("[threads] Terminado")

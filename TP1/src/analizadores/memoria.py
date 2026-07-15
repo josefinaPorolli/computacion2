@@ -113,13 +113,13 @@ def analizar_memoria(pid):
     }
 
 
-def memoria(queue_pids, snapshot, intervalo_val, evento_stop):
+def memoria(queue_pids, queue_agregador, intervalo_val, evento_stop):
     """
     Proceso analizador de memoria.
 
     Parámetros:
       queue_pids   — Queue donde el recolector manda listas de PIDs
-      snapshot     — Manager.dict compartido donde escribimos resultados
+      queue_agregador — Queue donde enviamos los resultados
       intervalo_val— multiprocessing.Value con el intervalo actual
       evento_stop  — Event para shutdown limpio
     """
@@ -141,7 +141,7 @@ def memoria(queue_pids, snapshot, intervalo_val, evento_stop):
             if datos is not None:
                 resultados[pid] = datos
 
-        snapshot['memoria'] = resultados
+        queue_agregador.put(('memoria', resultados))
         time.sleep(intervalo_val.value)
 
     print("[memoria] Terminado")

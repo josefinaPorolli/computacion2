@@ -87,13 +87,13 @@ def analizar_proceso(pid, lecturas_anteriores):
     }
 
 
-def resumen(queue_pids, snapshot, intervalo_val, evento_stop):
+def resumen(queue_pids, queue_agregador, intervalo_val, evento_stop):
     """
     Proceso analizador de resumen.
 
     Parámetros:
       queue_pids   — Queue donde el recolector manda listas de PIDs
-      snapshot     — Manager.dict compartido donde escribimos resultados
+      queue_agregador — Queue donde enviamos los resultados
       intervalo_val— multiprocessing.Value con el intervalo actual (ajustable)
       evento_stop  — Event para shutdown limpio
     """
@@ -129,7 +129,7 @@ def resumen(queue_pids, snapshot, intervalo_val, evento_stop):
         }
 
         # Escribimos en el snapshot global
-        snapshot['resumen'] = resultados
+        queue_agregador.put(('resumen', resultados))
 
         # Esperamos el intervalo antes de pedir más PIDs
         time.sleep(intervalo_val.value)

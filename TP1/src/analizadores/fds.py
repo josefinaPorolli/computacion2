@@ -108,13 +108,13 @@ def analizar_fds(pid):
     }
 
 
-def fds(queue_pids, snapshot, intervalo_val, evento_stop):
+def fds(queue_pids, queue_agregador, intervalo_val, evento_stop):
     """
     Proceso analizador de file descriptors.
 
     Parámetros:
       queue_pids   — Queue donde el recolector manda listas de PIDs
-      snapshot     — Manager.dict compartido donde escribimos resultados
+      queue_agregador — Queue donde enviamos los resultados
       intervalo_val— multiprocessing.Value con el intervalo actual
       evento_stop  — Event para shutdown limpio
     """
@@ -136,7 +136,7 @@ def fds(queue_pids, snapshot, intervalo_val, evento_stop):
             if datos is not None:
                 resultados[pid] = datos
 
-        snapshot['fds'] = resultados
+        queue_agregador.put(('fds', resultados))
         time.sleep(intervalo_val.value)
 
     print("[fds] Terminado")

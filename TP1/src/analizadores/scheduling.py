@@ -62,7 +62,7 @@ def analizar_scheduling(pid):
     }
 
 
-def scheduling(queue_pids, snapshot, intervalo_val, evento_stop):
+def scheduling(queue_pids, queue_agregador, intervalo_val, evento_stop):
     """
     Proceso analizador de scheduling.
     """
@@ -84,7 +84,7 @@ def scheduling(queue_pids, snapshot, intervalo_val, evento_stop):
             if datos is not None:
                 resultados[pid] = datos
 
-        snapshot['scheduling'] = resultados
+        queue_agregador.put(('scheduling', resultados))
         time.sleep(intervalo_val.value)
 
     print("[scheduling] Terminado")
