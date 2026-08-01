@@ -1,15 +1,18 @@
 """
 main.py — Entry point del monitor de procesos.
-Crea el Manager, lanza todos los procesos y espera.
 """
 import os
 import sys
+import time
+import threading
 import multiprocessing as mp
+import readchar
 sys.path.insert(0, os.path.dirname(__file__))
 
 from recolector              import recolector
 from agregador               import agregador
 from display                 import display
+from manejador_senales       import instalar_handlers, procesar_senales
 from analizadores.resumen    import resumen
 from analizadores.memoria    import memoria
 from analizadores.fds        import fds
@@ -19,12 +22,38 @@ from analizadores.scheduling import scheduling
 from analizadores.sistema    import sistema
 
 
+def thread_teclas(queue_teclas, evento_stop):
+    """
+    Thread que lee teclas y las manda al display via queue.
+    Corre en un thread separado para no bloquear el loop principal.
+    """
+    while not evento_stop.is_set():
+        try:
+            ch = readchar.readkey()
+            if ch == readchar.key.UP:
+                queue_teclas.put('UP')
+            elif ch == readchar.key.DOWN:
+                queue_teclas.put('DOWN')
+            elif ch in (readchar.key.ENTER, '\r', '\n'):
+                queue_teclas.put('ENTER')
+            elif ch == 'q':
+                queue_teclas.put('q')
+                evento_stop.set()
+                break
+            else:
+                queue_teclas.put(ch)
+        except Exception:
+            pass
+
+
 def main():
     manager     = mp.Manager()
     snapshot    = manager.dict()
     evento_stop = mp.Event()
 
-    # Queues de PIDs — una por analizador
+    # Instalamos handlers ANTES de lanzar hijos
+    instalar_handlers()
+
     queue_resumen    = mp.Queue(maxsize=1)
     queue_memoria    = mp.Queue(maxsize=1)
     queue_fds        = mp.Queue(maxsize=1)
@@ -32,11 +61,9 @@ def main():
     queue_senales    = mp.Queue(maxsize=1)
     queue_scheduling = mp.Queue(maxsize=1)
     queue_sistema    = mp.Queue(maxsize=1)
-
-    # Queue única para el agregador
     queue_agregador  = mp.Queue()
+    queue_teclas     = mp.Queue()
 
-    # Intervalos ajustables por vista
     intervalos = {
         'resumen':    mp.Value('d', 2.0),
         'memoria':    mp.Value('d', 3.0),
@@ -69,17 +96,26 @@ def main():
         mp.Process(target=sistema, name="sistema",
                    args=(queue_sistema, queue_agregador, intervalos['sistema'], evento_stop)),
         mp.Process(target=display, name="display",
-                   args=(snapshot, intervalos, evento_stop)),
+                   args=(snapshot, intervalos, evento_stop, queue_teclas)),
     ]
 
     for p in procesos:
         p.start()
 
-    # Esperamos que el display termine (el usuario apretó q)
-    # o que algún proceso hijo muera inesperadamente
+    # Thread de teclado — separado para no bloquear el loop de señales
+    t_teclas = threading.Thread(
+        target=thread_teclas,
+        args=(queue_teclas, evento_stop),
+        daemon=True,
+        name="teclas"
+    )
+    t_teclas.start()
+
+    # Loop principal — solo procesa señales
     try:
-        for p in procesos:
-            p.join()
+        while not evento_stop.is_set():
+            procesar_senales(evento_stop, procesos, intervalos, snapshot)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         pass
     finally:
@@ -87,9 +123,10 @@ def main():
         for p in procesos:
             if p.is_alive():
                 p.join(timeout=3)
-                if p.is_alive():
-                    p.terminate()
+            if p.is_alive():
+                p.terminate()
         manager.shutdown()
+        print("\n[main] Monitor terminado")
 
 
 if __name__ == "__main__":

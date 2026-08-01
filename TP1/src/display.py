@@ -461,143 +461,97 @@ def render_pantalla(snapshot, estado):
 # Thread de teclado
 # ---------------------------------------------------------------------------
 
-def thread_teclado(estado, snapshot, intervalos):
+def procesar_tecla(ch, estado, snapshot, intervalos):
     """
-    Lee teclas del usuario y actualiza el estado.
-    Corre en un thread separado dentro del proceso display.
+    Procesa una tecla recibida y actualiza el estado.
+    Llamado desde el loop principal del display con teclas que vienen de main.py.
     """
-    import tty
-    import termios
+    if ch == 'q':
+        estado.set('corriendo', False)
 
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    elif ch in VISTAS:
+        estado.set('vista_activa', VISTAS[ch])
 
-    try:
-        tty.setraw(fd)
-        while estado.get('corriendo'):
-            ch = sys.stdin.read(1)
+    elif ch == 'c':
+        orden_actual = estado.get('orden')
+        idx = ORDENES.index(orden_actual) if orden_actual in ORDENES else 0
+        estado.set('orden', ORDENES[(idx + 1) % len(ORDENES)])
 
-            if ch == 'q':
-                estado.set('corriendo', False)
+    elif ch in ('\r', '\n', 'ENTER'):
+        procs  = obtener_procesos_filtrados(snapshot, estado)
+        indice = estado.get('indice_lista')
+        if procs and 0 <= indice < len(procs):
+            pid = procs[indice].get('pid')
+            if estado.get('pid_seleccionado') == pid:
+                estado.set('pid_seleccionado', None)
+            else:
+                estado.set('pid_seleccionado', pid)
 
-            elif ch in VISTAS:
-                estado.set('vista_activa', VISTAS[ch])
+    elif ch == 'UP':
+        indice = estado.get('indice_lista')
+        estado.set('indice_lista', max(0, indice - 1))
 
-            elif ch == 'c':
-                # Ciclar entre órdenes
-                orden_actual = estado.get('orden')
-                idx = ORDENES.index(orden_actual) if orden_actual in ORDENES else 0
-                estado.set('orden', ORDENES[(idx + 1) % len(ORDENES)])
+    elif ch == 'DOWN':
+        procs  = obtener_procesos_filtrados(snapshot, estado)
+        indice = estado.get('indice_lista')
+        estado.set('indice_lista', min(len(procs) - 1, indice + 1))
 
-            elif ch == '\r':  # Enter — pin del proceso
-                procs = obtener_procesos_filtrados(snapshot, estado)
-                indice = estado.get('indice_lista')
-                if procs and 0 <= indice < len(procs):
-                    pid = procs[indice].get('pid')
-                    # Toggle: si ya estaba pineado lo des-pinea
-                    if estado.get('pid_seleccionado') == pid:
-                        estado.set('pid_seleccionado', None)
-                    else:
-                        estado.set('pid_seleccionado', pid)
+    elif ch == '+':
+        vista = estado.get('vista_activa')
+        if vista in intervalos:
+            intervalos[vista].value = min(60.0, intervalos[vista].value + 0.5)
 
-            elif ch == '\x1b':  # secuencia de escape (flechas)
-                ch2 = sys.stdin.read(1)
-                if ch2 == '[':
-                    ch3 = sys.stdin.read(1)
-                    procs = obtener_procesos_filtrados(snapshot, estado)
-                    indice = estado.get('indice_lista')
-                    if ch3 == 'A':  # ↑
-                        estado.set('indice_lista', max(0, indice - 1))
-                    elif ch3 == 'B':  # ↓
-                        estado.set('indice_lista', min(len(procs) - 1, indice + 1))
+    elif ch == '-':
+        vista = estado.get('vista_activa')
+        if vista in intervalos:
+            intervalos[vista].value = max(0.5, intervalos[vista].value - 0.5)
 
-            elif ch == '/':
-                # Filtro por comando — leemos el texto
-                tty.setcbreak(fd)
-                sys.stdout.write('\nFiltrar por comando: ')
-                sys.stdout.flush()
-                filtro = ''
-                while True:
-                    c = sys.stdin.read(1)
-                    if c == '\r' or c == '\n':
-                        break
-                    elif c == '\x7f':  # backspace
-                        filtro = filtro[:-1]
-                    else:
-                        filtro += c
-                estado.set('filtro_cmd', filtro if filtro else None)
-                estado.set('indice_lista', 0)
-                tty.setraw(fd)
+    elif ch.startswith('FILTRO_CMD:'):
+        estado.set('filtro_cmd', ch[11:] or None)
+        estado.set('indice_lista', 0)
 
-            elif ch == 'u':
-                # Filtro por usuario
-                tty.setcbreak(fd)
-                sys.stdout.write('\nFiltrar por usuario: ')
-                sys.stdout.flush()
-                filtro = ''
-                while True:
-                    c = sys.stdin.read(1)
-                    if c == '\r' or c == '\n':
-                        break
-                    elif c == '\x7f':
-                        filtro = filtro[:-1]
-                    else:
-                        filtro += c
-                estado.set('filtro_usuario', filtro if filtro else None)
-                estado.set('indice_lista', 0)
-                tty.setraw(fd)
-
-            elif ch == '+':
-                vista = estado.get('vista_activa')
-                if vista in intervalos:
-                    intervalos[vista].value = min(60.0, intervalos[vista].value + 0.5)
-
-            elif ch == '-':
-                vista = estado.get('vista_activa')
-                if vista in intervalos:
-                    # Respetamos el mínimo del config
-                    intervalos[vista].value = max(0.5, intervalos[vista].value - 0.5)
-
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    elif ch.startswith('FILTRO_USR:'):
+        estado.set('filtro_usuario', ch[11:] or None)
+        estado.set('indice_lista', 0)
 
 
 # ---------------------------------------------------------------------------
 # Proceso display principal
 # ---------------------------------------------------------------------------
 
-def display(snapshot, intervalos, evento_stop):
+def display(snapshot, intervalos, evento_stop, queue_teclas):
     """
     Proceso display principal.
 
     Parámetros:
-      snapshot   — Manager.dict con todos los datos
-      intervalos — dict de multiprocessing.Value con intervalos por vista
-      evento_stop— Event para shutdown limpio
+      snapshot     — Manager.dict con todos los datos
+      intervalos   — dict de multiprocessing.Value con intervalos por vista
+      evento_stop  — Event para shutdown limpio
+      queue_teclas — Queue donde main.py manda las teclas leídas
     """
     print(f"[display] Arrancando (PID {mp.current_process().pid})")
 
-    estado = EstadoDisplay()
+    estado  = EstadoDisplay()
     console = Console()
 
-    # Lanzamos el thread de teclado
-    t_teclado = threading.Thread(
-        target=thread_teclado,
-        args=(estado, snapshot, intervalos),
-        daemon=True,
-        name="teclado"
-    )
-    t_teclado.start()
-
-    # Loop principal de renderizado
     with Live(console=console, refresh_per_second=4, screen=True) as live:
         while estado.get('corriendo') and not evento_stop.is_set():
+
+            # Procesar todas las teclas pendientes en la queue
+            while not queue_teclas.empty():
+                try:
+                    ch = queue_teclas.get_nowait()
+                    procesar_tecla(ch, estado, snapshot, intervalos)
+                except Exception:
+                    pass
+
+            # Renderizar
             try:
-                pantalla = render_pantalla(snapshot, estado)
-                live.update(pantalla)
+                live.update(render_pantalla(snapshot, estado))
             except Exception as e:
                 live.update(Panel(f"Error renderizando: {e}", style="red"))
-            time.sleep(0.25)
+
+            time.sleep(0.05)
 
     evento_stop.set()
     print("[display] Terminado")
