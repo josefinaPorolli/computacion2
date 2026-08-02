@@ -79,6 +79,33 @@ def leer_uptime():
         return 0.0
 
 
+def leer_boot_time():
+    """Lee el timestamp de arranque del sistema desde /proc/stat línea btime."""
+    try:
+        with open('/proc/stat') as f:
+            for linea in f:
+                if linea.startswith('btime'):
+                    return int(linea.split()[1])
+    except (FileNotFoundError, ValueError, IndexError):
+        pass
+    return 0
+
+
+def contar_estados(snapshot):
+    """Cuenta procesos por estado y total de threads desde el snapshot de resumen."""
+    estados = {'R': 0, 'S': 0, 'D': 0, 'T': 0, 'Z': 0, 'otros': 0}
+    total_threads = 0
+    datos_resumen = snapshot.get('resumen', {})
+    for proc in datos_resumen.values():
+        estado = proc.get('estado', '?')
+        if estado in estados:
+            estados[estado] += 1
+        else:
+            estados['otros'] += 1
+        total_threads += proc.get('threads', 0)
+    return estados, total_threads
+
+
 def formatear_uptime(segundos):
     dias    = int(segundos // 86400)
     horas   = int((segundos % 86400) // 3600)
@@ -92,7 +119,7 @@ def formatear_uptime(segundos):
     return ' '.join(partes)
 
 
-def sistema(queue_pids, queue_agregador, intervalo_val, evento_stop):
+def sistema(queue_pids, queue_agregador, intervalo_val, evento_stop, snapshot=None):
     print(f"[sistema] Arrancando (PID {mp.current_process().pid})")
     cpu_anterior = None
 
@@ -121,7 +148,8 @@ def sistema(queue_pids, queue_agregador, intervalo_val, evento_stop):
 
         cpu_anterior = cpu_actual
 
-        uptime_seg = leer_uptime()
+        uptime_seg        = leer_uptime()
+        estados, total_th = contar_estados(snapshot) if snapshot else ({'R':0,'S':0,'D':0,'T':0,'Z':0,'otros':0}, 0)
 
         queue_agregador.put(('sistema', {
             'cpu':           cpu_pct,
@@ -129,7 +157,10 @@ def sistema(queue_pids, queue_agregador, intervalo_val, evento_stop):
             'loadavg':       leer_loadavg(),
             'uptime_seg':    uptime_seg,
             'uptime_str':    formatear_uptime(uptime_seg),
+            'boot_time':     leer_boot_time(),
             'total_procs':   len(pids),
+            'total_threads': total_th,
+            'estados':       estados,
         }))
 
         time.sleep(intervalo_val.value)

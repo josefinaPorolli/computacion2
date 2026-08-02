@@ -43,6 +43,13 @@ class EstadoDisplay:
         self.orden           = 'cpu'
         self.corriendo       = True
         self.modo_verbose    = False
+        # Captura de texto para los filtros '/' (comando) y 'u' (usuario).
+        # modo_input es None cuando no se está tipeando ningún filtro,
+        # o 'cmd'/'usuario' mientras se espera texto seguido de Enter.
+        self.modo_input      = None
+        self.buffer_input    = ''
+        # Overlay de ayuda, se abre/cierra con 'h'.
+        self.modo_ayuda      = False
 
     def get(self, attr):
         with self.lock:
@@ -398,6 +405,12 @@ def render_vista_sistema(snapshot):
     top_cpu = snapshot.get('top_cpu', [])
     top_mem = snapshot.get('top_mem', [])
 
+    import datetime
+    boot    = sis.get('boot_time', 0)
+    boot_str = datetime.datetime.fromtimestamp(boot).strftime('%Y-%m-%d %H:%M:%S') if boot else '?'
+    estados  = sis.get('estados', {})
+    total_th = sis.get('total_threads', 0)
+
     texto = (
         f"[bold cyan]CPU Global[/bold cyan]\n"
         f"  user={cpu.get('user',0):.1f}%  system={cpu.get('system',0):.1f}%  "
@@ -409,6 +422,13 @@ def render_vista_sistema(snapshot):
         f"  Swap:       {fmt_kb(mem.get('swap_total',0) - mem.get('swap_libre',0))} / {fmt_kb(mem.get('swap_total',0))}\n\n"
         f"[bold cyan]Load Average[/bold cyan]\n"
         f"  {load.get('load1',0):.2f}  {load.get('load5',0):.2f}  {load.get('load15',0):.2f}\n\n"
+        f"[bold cyan]Procesos[/bold cyan]\n"
+        f"  Total: {sis.get('total_procs',0)}  Threads: {total_th}\n"
+        f"  R={estados.get('R',0)} S={estados.get('S',0)} D={estados.get('D',0)} "
+        f"T={estados.get('T',0)} Z={estados.get('Z',0)}\n\n"
+        f"[bold cyan]Sistema[/bold cyan]\n"
+        f"  Uptime:    {sis.get('uptime_str','?')}\n"
+        f"  Boot time: {boot_str}\n\n"
         f"[bold cyan]Top 3 CPU[/bold cyan]\n"
     )
     for p in top_cpu:
@@ -422,7 +442,17 @@ def render_vista_sistema(snapshot):
 
 
 def render_barra_inferior(estado):
-    """Barra inferior con keybindings."""
+    """Barra inferior con keybindings, o el prompt de filtro si se está tipeando uno."""
+    modo_input = estado.get('modo_input')
+    if modo_input is not None:
+        etiqueta = "Filtrar por comando" if modo_input == 'cmd' else "Filtrar por usuario"
+        buffer   = estado.get('buffer_input')
+        texto = (
+            f"[bold yellow]{etiqueta}:[/bold yellow] {buffer}[bold]▌[/bold]   "
+            f"[dim](Enter: aplicar · Esc: cancelar · Backspace: borrar)[/dim]"
+        )
+        return Panel(Text.from_markup(texto), box=box.SIMPLE, border_style="yellow")
+
     vista = estado.get('vista_activa')
     orden = estado.get('orden')
 
@@ -435,6 +465,33 @@ def render_barra_inferior(estado):
     return Panel(Text.from_markup(texto), box=box.SIMPLE)
 
 
+def render_ayuda():
+    """Panel de ayuda con todos los atajos de teclado, se abre/cierra con 'h'."""
+    texto = (
+        "[bold cyan]Navegación[/bold cyan]\n"
+        "  ↑ / ↓        Mover selección en la lista de procesos\n"
+        "  Enter        Fijar / soltar el proceso seleccionado\n\n"
+        "[bold cyan]Vistas[/bold cyan]\n"
+        "  1 / r        Resumen\n"
+        "  2 / m        Memoria\n"
+        "  3 / f        Descriptores de archivo (FDs)\n"
+        "  4 / t        Threads\n"
+        "  5 / s        Señales\n"
+        "  6 / p        Scheduling\n"
+        "  7 / g        Sistema global\n\n"
+        "[bold cyan]Filtros y orden[/bold cyan]\n"
+        "  /            Filtrar por nombre/comando\n"
+        "  u            Filtrar por usuario\n"
+        "  c            Ciclar orden de la lista (cpu → rss → pid)\n"
+        "  +  /  -      Aumentar / disminuir el intervalo de refresco de la vista activa\n\n"
+        "[bold cyan]General[/bold cyan]\n"
+        "  h            Mostrar / ocultar esta ayuda\n"
+        "  q            Salir\n\n"
+        "[dim]Presioná cualquier tecla para cerrar esta ayuda...[/dim]"
+    )
+    return Panel(Text.from_markup(texto), title="Ayuda", box=box.DOUBLE, border_style="cyan")
+
+
 # ---------------------------------------------------------------------------
 # Composición de la pantalla completa
 # ---------------------------------------------------------------------------
@@ -442,6 +499,18 @@ def render_barra_inferior(estado):
 def render_pantalla(snapshot, estado):
     """Arma el layout completo."""
     layout = Layout()
+
+    # Overlay de ayuda: pisa toda la pantalla (salvo la barra superior)
+    # hasta que se presione cualquier tecla para cerrarlo.
+    if estado.get('modo_ayuda'):
+        layout.split_column(
+            Layout(name="superior", size=3),
+            Layout(name="ayuda"),
+        )
+        layout["superior"].update(render_barra_superior(snapshot))
+        layout["ayuda"].update(render_ayuda())
+        return layout
+
     layout.split_column(
         Layout(name="superior", size=3),
         Layout(name="lista",    size=18),
@@ -466,8 +535,57 @@ def procesar_tecla(ch, estado, snapshot, intervalos):
     Procesa una tecla recibida y actualiza el estado.
     Llamado desde el loop principal del display con teclas que vienen de main.py.
     """
+    # -----------------------------------------------------------------
+    # Modo captura de texto: mientras se está tipeando un filtro
+    # (activado con '/' o 'u'), CUALQUIER tecla se interpreta como
+    # parte del texto hasta que llegue ENTER (confirma) o ESC (cancela).
+    # Esto tiene que evaluarse antes que cualquier otro atajo, porque
+    # de lo contrario tipear por ejemplo 'q' o 'h' dentro de un filtro
+    # dispararía esos atajos en lugar de agregarse al texto.
+    # -----------------------------------------------------------------
+    modo_input = estado.get('modo_input')
+    if modo_input is not None:
+        if ch in ('\r', '\n', 'ENTER'):
+            texto = estado.get('buffer_input').strip()
+            if modo_input == 'cmd':
+                estado.set('filtro_cmd', texto or None)
+            elif modo_input == 'usuario':
+                estado.set('filtro_usuario', texto or None)
+            estado.set('indice_lista', 0)
+            estado.set('modo_input', None)
+            estado.set('buffer_input', '')
+        elif ch == 'ESC':
+            estado.set('modo_input', None)
+            estado.set('buffer_input', '')
+        elif ch == 'BACKSPACE':
+            buffer = estado.get('buffer_input')
+            estado.set('buffer_input', buffer[:-1])
+        elif isinstance(ch, str) and len(ch) == 1 and ch.isprintable():
+            buffer = estado.get('buffer_input')
+            estado.set('buffer_input', buffer + ch)
+        # Cualquier otra tecla especial no reconocida se ignora.
+        return
+
+    # -----------------------------------------------------------------
+    # Overlay de ayuda: si está abierto, cualquier tecla lo cierra.
+    # -----------------------------------------------------------------
+    if estado.get('modo_ayuda'):
+        estado.set('modo_ayuda', False)
+        return
+
     if ch == 'q':
         estado.set('corriendo', False)
+
+    elif ch == 'h':
+        estado.set('modo_ayuda', True)
+
+    elif ch == '/':
+        estado.set('modo_input', 'cmd')
+        estado.set('buffer_input', '')
+
+    elif ch == 'u':
+        estado.set('modo_input', 'usuario')
+        estado.set('buffer_input', '')
 
     elif ch in VISTAS:
         estado.set('vista_activa', VISTAS[ch])
@@ -505,14 +623,6 @@ def procesar_tecla(ch, estado, snapshot, intervalos):
         vista = estado.get('vista_activa')
         if vista in intervalos:
             intervalos[vista].value = max(0.5, intervalos[vista].value - 0.5)
-
-    elif ch.startswith('FILTRO_CMD:'):
-        estado.set('filtro_cmd', ch[11:] or None)
-        estado.set('indice_lista', 0)
-
-    elif ch.startswith('FILTRO_USR:'):
-        estado.set('filtro_usuario', ch[11:] or None)
-        estado.set('indice_lista', 0)
 
 
 # ---------------------------------------------------------------------------
