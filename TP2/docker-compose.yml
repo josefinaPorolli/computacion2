@@ -1,0 +1,25 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      WORKERS: "4"            # corrutinas worker
+      # PROCESOS_CPU: "2"     # por defecto, os.cpu_count()
+      COLA_MAX: "1000"
+      TIMEOUT_DEFECTO: "60"
+      GRACIA_APAGADO: "10"
+      DIR_VOLCADOS: "/app/volcados"
+    volumes:
+      - ./volcados:/app/volcados   # los estado_<timestamp>.json quedan en el host
+    # Más que GRACIA_APAGADO: si no, Docker manda SIGKILL antes del volcado
+    stop_grace_period: 30s
+    depends_on:
+      - lento
+
+  # Servidor de prueba con demoras controladas, para medir descargas
+  lento:
+    build: .
+    command: ["python", "-m", "lento.servidor"]
+    ports:
+      - "9000:9000"

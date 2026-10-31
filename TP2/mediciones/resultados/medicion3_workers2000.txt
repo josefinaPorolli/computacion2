@@ -1,0 +1,21 @@
+# Corrida 1
+=== Medición 3A: N tareas `esperar` de 1.0 s (2000 workers, 1 proceso(s) cliente) ===
+       N    total   ideal  espera cola  ejecución    POSTs     ok  rechaz.
+     100    1.20s      1s        0.00s      1.00s    0.18s    100        0
+     500    2.11s      1s        0.00s      1.00s    1.10s    500        0
+    1000    3.32s      1s        0.00s      1.00s    2.31s   1000        0
+    2000    5.27s      1s        0.00s      1.00s    4.25s   2000        0
+    4000   10.86s      2s        0.00s      1.00s    9.83s   4000        0
+    8000   22.38s      4s        0.00s      1.00s   21.32s   8000        0
+
+# Corrida 2 (misma máquina, otro momento)
+
+=== Medición 3A: N tareas `esperar` de 1.0 s (2000 workers, 1 proceso(s) cliente) ===
+       N    total   ideal  espera cola  ejecución    POSTs     ok  rechaz.
+     100    1.21s      1s        0.00s      1.01s    0.31s    100        0
+    1000    7.92s      1s        0.00s      1.00s    6.90s   1000        0
+    2000   14.20s      1s        0.00s      1.00s   13.19s   2000        0
+    4000   17.90s      2s        0.00s      1.00s   16.85s   4000        0
+    8000   30.07s      4s        0.00s      1.00s   29.01s   8000        0
+
+# CPU durante la ráfaga (top): cliente de medición ~91%, servidor ~10-30%

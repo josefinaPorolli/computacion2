@@ -1,0 +1,6 @@
+
+=== Medición 2: GET /tareas durante un hash de 5,000,000 iteraciones ===
+  modo         hash   GETs    mediana        p95       peor
+  directo     3.49s      1   3494.9ms   3494.9ms   3494.9ms
+  thread      4.35s     62     14.0ms     19.6ms     22.1ms
+  proceso     4.31s     76      3.5ms      7.4ms      9.1ms

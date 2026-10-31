@@ -1,0 +1,19 @@
+
+=== Medición 3A: N tareas `esperar` de 1.0 s (4 workers, 1 proceso(s) cliente) ===
+       N    total   ideal  espera cola  ejecución    POSTs     ok  rechaz.
+       1    1.04s      1s        0.00s      1.00s    0.02s      1        0
+       2    1.04s      1s        0.00s      1.00s    0.02s      2        0
+       4    1.03s      1s        0.00s      1.00s    0.03s      4        0
+       8    2.06s      2s        0.50s      1.00s    0.04s      8        0
+      16    4.05s      4s        1.50s      1.00s    0.04s     16        0
+      32    8.07s      8s        3.50s      1.00s    0.07s     32        0
+      64   16.11s     16s        7.48s      1.00s    0.16s     64        0
+
+=== Medición 3B: N hashes de 1,500,000 iteraciones (2 procesos CPU, 4 workers) ===
+       N    total  por tarea  espera cola   ok
+       1    1.37s      1.34s        0.00s    1
+       2    1.30s      1.19s        0.00s    2
+       3    1.87s      1.76s        0.00s    3
+       4    2.38s      2.27s        0.00s    4
+       6    3.63s      1.94s        0.75s    6
+       8    4.96s      2.41s        1.12s    8

@@ -1,0 +1,7 @@
+# Extra: costo de mandar el hash en bloques al ProcessPoolExecutor
+# 5.000.000 iteraciones, 1 proceso, tres corridas (segundos)
+directo (en el mismo proceso)   3.22   3.32   3.45
+1 bloque de 5.000.000           3.54   3.44   3.59
+bloques de 1.000.000            4.00   4.07   3.61
+bloques de 100.000 (default)    4.27   4.06   4.34
+bloques de 20.000               5.35   4.24   3.99
