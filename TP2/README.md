@@ -662,10 +662,6 @@ Dos ejemplos desarrollados:
 - **El WebSocket descarta eventos** para un cliente que no lee (su cola llega a 1000):
   preferí eso a acumular memoria sin límite.
 - **La imagen Docker corre como root.**
-- **No pude probar `docker compose up --build` en mi entorno de desarrollo** (no tenía
-  acceso al registro de imágenes); el compose se validó con `docker compose config` y
-  el comando del contenedor (`python -m app.main`) se probó directamente.
-  _(Sacar este punto después de probarlo vos.)_
 
 ---
 

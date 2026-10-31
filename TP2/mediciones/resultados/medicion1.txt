@@ -3,6 +3,6 @@
 URLs del servidor lento, 200000 bytes c/u, demoras entre 0.2 y 1.0 s (semilla 2026)
   suma de las demoras :  12.55 s   <- lo esperable secuencial
   la demora más larga :   0.89 s   <- lo esperable concurrente
-  secuencial          :  12.69 s
+  secuencial          :  12.68 s
   concurrente         :   0.91 s
-  speedup             :   14.0x
+  speedup             :   13.9x
