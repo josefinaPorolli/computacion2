@@ -1,6 +1,6 @@
 
 === Medición 2: GET /tareas durante un hash de 5,000,000 iteraciones ===
   modo         hash   GETs    mediana        p95       peor
-  directo  rechazado (403): El modo 'directo' bloquea el event loop y está deshabilitado. Para la medición 2, arrancar con PERMITIR_MODO_DIRECTO=1
-  thread      1.64s     23     12.2ms     17.7ms     17.8ms
-  proceso     2.86s     54      2.2ms      2.9ms      5.1ms
+  directo     1.60s      1   1599.2ms   1599.2ms   1599.2ms
+  thread      2.01s     29      9.3ms     18.6ms     19.7ms
+  proceso     2.51s     48      2.1ms      2.9ms      6.1ms
