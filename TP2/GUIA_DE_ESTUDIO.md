@@ -163,7 +163,7 @@ procesa POSTs (un solo thread). Después, la memoria del registro, porque nunca 
 
 El `for` espera a que termine cada una antes de *empezar* la siguiente: tarda la suma.
 `gather` (o `TaskGroup`) las lanza todas y después espera a todas: tarda lo que la más
-lenta. Medición 1: 12,69 s contra 0,91 s. Además, `TaskGroup` (que es lo que uso) tiene
+lenta. Medición 1: 12,68 s contra 0,91 s. Además, `TaskGroup` (que es lo que uso) tiene
 una ventaja sobre `gather`: si una falla, cancela a las demás en vez de dejarlas
 huérfanas (clase 21).
 
@@ -177,7 +177,7 @@ Mientras, atiende a todos los demás. La medición 2 en modo `directo` es el mis
 ### Otras que pueden caer
 
 - **¿Por qué procesos y no threads para el hash?** El GIL. Medido: con threads el GET
-  tarda 14 ms; con procesos, 3,5 ms. Y dos hashes en threads no corren en paralelo.
+  tarda 9,3 ms; con procesos, 2,1 ms. Y dos hashes en threads no corren en paralelo.
 - **¿Por qué `asyncio.Queue` y no `queue.Queue`?** `queue.Queue.get()` bloquea el thread,
   que es el único que hay. `asyncio.Queue.get()` suspende la corrutina.
 - **¿Qué pasa si un worker lanza una excepción?** Tres niveles: la tarea pasa a

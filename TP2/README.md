@@ -49,7 +49,11 @@ stateDiagram-v2
 
 ### Levantarlo
 
+El TP está en la carpeta `TP2/` del repositorio:
+
 ```bash
+git clone https://github.com/josefinaPorolli/computacion2.git
+cd computacion2/TP2
 docker compose up --build
 ```
 
@@ -253,15 +257,15 @@ haberla cancelado. Por eso, apenas la saca, chequea que siga `pendiente`.
 
 Un `for` de millones de SHA-256 no tiene ningún `await`: si corre en una corrutina,
 el loop no recupera el control hasta que termina. La medición 2 lo muestra: un
-`GET /tareas` tardó **3,5 segundos** en responder.
+`GET /tareas` tardó **1,6 segundos** en responder.
 
 La solución es `loop.run_in_executor(pool_cpu, hash_iterado, h, n)`: el cálculo corre
 en un proceso del `ProcessPoolExecutor` y la corrutina hace `await` del resultado,
-cediendo el control mientras tanto. Con eso, el mismo GET tarda **3,5 ms**.
+cediendo el control mientras tanto. Con eso, el mismo GET tarda **2,1 ms**.
 
 - **Procesos y no threads**, por el GIL: un thread que calcula no deja correr bytecode
   a los demás. Con `asyncio.to_thread` el loop sigue vivo pero compite por el GIL (el
-  GET tarda 14 ms, 4× más que con procesos), y dos hashes en threads no corren en
+  GET tarda 9,3 ms, 4× más que con procesos), y dos hashes en threads no corren en
   paralelo. Cada proceso tiene su propio intérprete y su GIL.
 - **El pool se crea una sola vez** al arrancar (en el `lifespan`), y se precalienta.
   Crear procesos es caro.
@@ -426,10 +430,16 @@ de uvicorn como red de seguridad.
 
 ## 4. Mediciones
 
-> **Entorno donde se midió**: VM Linux de 2 núcleos, Python 3.13, servidor corriendo
-> directamente (sin Docker) con uvicorn + uvloop, cliente de medición en la misma
-> máquina. Los resultados crudos están en `mediciones/resultados/`.
-> **Para tus propios números**, con `docker compose up --build` corriendo:
+> **Entorno donde se midió**: mi PC con Linux, 32 núcleos lógicos, servidor en Docker
+> (`docker compose up --build`, imagen Python 3.12), cliente de medición en la misma
+> máquina (Python 3.12, fuera de Docker). Los resultados crudos están en
+> `mediciones/resultados/`.
+>
+> Excepción: la prueba con 2000 workers (3A), la de 10.000 tareas (3C) y el extra del
+> tamaño de bloque se midieron durante el desarrollo en una VM Linux de 2 núcleos; están
+> marcadas en cada caso.
+>
+> **Para repetirlas**, con `docker compose up --build` corriendo:
 >
 > ```bash
 > pip install httpx
@@ -450,18 +460,18 @@ veces: con `"secuencial": true` (un `for` con `await` adentro) y normal (`TaskGr
 |--|--:|
 | Suma de las 20 demoras (lo esperable secuencial) | 12,55 s |
 | La demora más larga (lo esperable concurrente) | 0,89 s |
-| **Secuencial** | **12,69 s** |
+| **Secuencial** | **12,68 s** |
 | **Concurrente** | **0,91 s** |
-| **Speedup** | **14,0×** |
+| **Speedup** | **13,9×** |
 
-**Interpretación.** El secuencial tarda la **suma** (12,55 s de demoras + 0,14 s de
+**Interpretación.** El secuencial tarda la **suma** (12,55 s de demoras + 0,13 s de
 overhead de 20 pedidos), y el concurrente tarda lo que **la más lenta** (0,89 s + 0,02 s).
 Es exactamente lo que pide la consigna. La diferencia es `for x: await bajar(x)` contra
 lanzar todas y esperarlas juntas: en el primero, el `await` de cada descarga no deja
 *empezar* la siguiente; en el segundo, las 20 están esperando la red al mismo tiempo, y
 el event loop (con `epoll` por debajo) despierta a cada una cuando llegan sus bytes.
 
-El speedup es 14× y no 20× porque las demoras no son iguales: el máximo teórico es
+El speedup es 13,9× y no 20× porque las demoras no son iguales: el máximo teórico es
 suma / máximo = 12,55 / 0,89 = 14,1×. Llegamos al 99 % del máximo posible.
 
 Con más URLs el speedup no crece para siempre: el `Semaphore(DESCARGAS_SIMULTANEAS=20)`
@@ -474,29 +484,30 @@ cada 50 ms y mide cuánto tarda cada respuesta. Tres modos:
 
 | Modo | Duración del hash | GETs respondidos | Mediana | p95 | Peor |
 |------|--:|--:|--:|--:|--:|
-| `directo` (en el event loop) | 3,49 s | **1** | 3494,9 ms | 3494,9 ms | **3494,9 ms** |
-| `thread` (`asyncio.to_thread`) | 4,35 s | 62 | 14,0 ms | 19,6 ms | 22,1 ms |
-| `proceso` (`run_in_executor`, el default) | 4,31 s | 76 | **3,5 ms** | 7,4 ms | **9,1 ms** |
+| `directo` (en el event loop) | 1,60 s | **1** | 1599,2 ms | 1599,2 ms | **1599,2 ms** |
+| `thread` (`asyncio.to_thread`) | 2,01 s | 29 | 9,3 ms | 18,6 ms | 19,7 ms |
+| `proceso` (`run_in_executor`, el default) | 2,51 s | 48 | **2,1 ms** | 2,9 ms | **6,1 ms** |
 
 **Interpretación.**
 
-- **`directo`**: el servidor respondió **un solo GET en 3,5 segundos**, y ese único GET
+- **`directo`**: el servidor respondió **un solo GET en 1,6 segundos**, y ese único GET
   tardó lo mismo que el hash. Durante el cálculo el servidor está **muerto**: no atiende
   pedidos, no avanza ninguna otra tarea, no dispara timeouts, no procesa cancelaciones.
   Es `time.sleep` dentro de una corrutina en otra forma: código que no hace `await`.
-- **`proceso`**: el GET tarda 3,5 ms, lo mismo que con el servidor ocioso. El cálculo
+- **`proceso`**: el GET tarda 2,1 ms, lo mismo que con el servidor ocioso. El cálculo
   está en otro proceso, con su propio GIL; el event loop solo hace `await` de un Future.
-  Es **1000 veces** menos latencia que en directo.
+  Es unas **760 veces** menos latencia que en directo.
 - **`thread`**: el loop no se congela, pero el GET tarda 4 veces más que con procesos.
   El thread del hash y el del loop se turnan el **GIL** (Python lo hace cambiar cada
   5 ms por defecto), así que cada vez que el loop quiere responder, a veces tiene que
   esperar su turno. Sirve, pero los procesos son la herramienta correcta para CPU.
-- El hash en `directo` es el más rápido (3,5 s contra 4,3 s) porque no paga la ida y
-  vuelta entre procesos, ni compite por la CPU con el loop que atiende los GETs. Ese ~20 %
-  es el precio de no bloquear: vale la pena.
+- El hash en `directo` es el más rápido (1,60 s contra 2,51 s) porque no paga la ida y
+  vuelta de los 50 bloques entre procesos. Ese ~0,9 s extra es el precio de no bloquear:
+  vale la pena, porque a cambio el servidor sigue atendiendo a todos.
 
-**Extra: costo de los bloques.** Medí el mismo hash mandándolo al executor en bloques de
-distinto tamaño (5M iteraciones, 3 corridas; `mediciones/resultados/extra_tamano_bloque.txt`):
+**Extra: costo de los bloques** _(medido durante el desarrollo, en la VM de 2 núcleos)_.
+El mismo hash mandado al executor en bloques de distinto tamaño (5M iteraciones,
+3 corridas; `mediciones/resultados/extra_tamano_bloque.txt`):
 
 | Forma | Corridas (s) |
 |--|--|
@@ -518,12 +529,12 @@ hacer efecto en vez de esperar al final del hash. Me quedé con 100.000.
 | N | Total | Ideal ⌈N/4⌉·1 s | Espera en cola (prom.) | Ejecución (prom.) |
 |--:|--:|--:|--:|--:|
 | 1 | 1,04 s | 1 s | 0,00 s | 1,00 s |
-| 2 | 1,04 s | 1 s | 0,00 s | 1,00 s |
-| 4 | 1,03 s | 1 s | 0,00 s | 1,00 s |
+| 2 | 1,06 s | 1 s | 0,00 s | 1,00 s |
+| 4 | 1,06 s | 1 s | 0,00 s | 1,00 s |
 | 8 | 2,06 s | 2 s | 0,50 s | 1,00 s |
-| 16 | 4,05 s | 4 s | 1,50 s | 1,00 s |
-| 32 | 8,07 s | 8 s | 3,50 s | 1,00 s |
-| 64 | 16,11 s | 16 s | 7,48 s | 1,00 s |
+| 16 | 4,06 s | 4 s | 1,50 s | 1,00 s |
+| 32 | 8,10 s | 8 s | 3,50 s | 1,00 s |
+| 64 | 16,10 s | 16 s | 7,50 s | 1,00 s |
 
 **Interpretación.** Hasta **N = 4 = WORKERS** todo tarda 1 s. A partir de ahí, escalones
 exactos: el total es ⌈N/4⌉ segundos. Lo que se degrada no es la ejecución (siempre 1,00 s),
@@ -531,7 +542,8 @@ sino la **espera en cola**, que crece linealmente. **El techo es la cantidad de 
 es un límite que pusimos nosotros, no un límite de la máquina.
 
 Para tareas I/O-bound ese límite es barato de subir, porque un worker esperando es solo
-una corrutina suspendida (unos KB de memoria, nada de CPU). Por eso probé con **2000 workers**:
+una corrutina suspendida (unos KB de memoria, nada de CPU). Por eso probé con **2000 workers**
+_(medido durante el desarrollo, en la VM de 2 núcleos)_:
 
 | N | Total (corrida 1) | Total (corrida 2) | POSTs (corrida 1) | Espera en cola |
 |--:|--:|--:|--:|--:|
@@ -558,27 +570,36 @@ bajó a 22 s.
 siguiente techo, si el cliente estuviera en otra máquina, sería **el thread del event loop**:
 todo el parseo HTTP, la validación con Pydantic y el JSON corren en un solo núcleo.
 
-#### 3B. N hashes de 1.500.000 iteraciones a la vez (2 procesos CPU, 4 workers)
+#### 3B. N hashes de 1.500.000 iteraciones a la vez (32 procesos CPU, 4 workers)
 
 | N | Total | Duración por tarea | Espera en cola |
 |--:|--:|--:|--:|
-| 1 | 1,37 s | 1,34 s | 0,00 s |
-| 2 | 1,30 s | 1,19 s | 0,00 s |
-| 3 | 1,87 s | 1,76 s | 0,00 s |
-| 4 | 2,38 s | 2,27 s | 0,00 s |
-| 6 | 3,63 s | 1,94 s | 0,75 s |
-| 8 | 4,96 s | 2,41 s | 1,12 s |
+| 1 | 0,73 s | 0,70 s | 0,00 s |
+| 2 | 0,73 s | 0,69 s | 0,00 s |
+| 3 | 0,73 s | 0,69 s | 0,00 s |
+| 4 | 0,62 s | 0,56 s | 0,00 s |
+| 6 | 1,23 s | 0,59 s | 0,19 s |
+| 8 | 1,38 s | 0,65 s | 0,29 s |
 
-**Interpretación.** Con 1 y 2 hashes, el total es el de uno solo (~1,3 s): **corren en
-paralelo de verdad**, uno por núcleo. Con 3 o más, el total crece ~0,6 s por hash extra:
-**el techo es la cantidad de procesos = núcleos**. Agregar workers no ayuda: con 4 hashes
-corriendo y 2 procesos, cada tarea tarda el doble (2,27 s) porque sus bloques se turnan
-en los procesos. Con 6 y 8 se suma además la espera en cola, porque solo hay 4 workers.
-Para CPU-bound, el techo lo pone el hardware y no se puede subir con configuración.
+**Interpretación.** De 1 a 4 hashes, el total es el de uno solo (~0,7 s): **corren en
+paralelo de verdad**, cada uno en su propio proceso y su propio núcleo. Por eso la
+duración de cada tarea no cambia (~0,6-0,7 s) aunque haya varias a la vez. Con threads
+esto no pasaría: por el GIL, 4 hashes en threads tardarían ~4 veces más.
+
+Con 6 y 8 el total sube y aparece **espera en cola**: hay solo **4 workers**, así que las
+tareas 5 a 8 esperan a que se libere uno. En mi máquina, con 32 núcleos, **el techo lo pusieron
+los workers y no la CPU**: sobran procesos (32) para los 4 hashes que pueden correr a la vez.
+
+En una máquina con menos núcleos que workers el techo sería el otro: en la VM de 2 núcleos
+donde desarrollé, a partir del tercer hash el total crecía ~0,6 s por hash extra, porque
+los bloques de las distintas tareas se turnaban en los 2 procesos. La regla general:
+**pueden calcular a la vez como mucho min(WORKERS, PROCESOS_CPU) hashes**. Subir los
+workers por encima de los núcleos no acelera el CPU-bound; ahí el techo lo pone el hardware.
 
 #### 3C. "Si te mando 10.000 tareas de golpe, ¿qué se rompe primero?"
 
-Lo probé con 3000 tareas `esperar` de 0,1 s, la config por defecto (4 workers, `COLA_MAX=1000`):
+Lo probé con 3000 tareas `esperar` de 0,1 s, la config por defecto (4 workers, `COLA_MAX=1000`)
+_(medido durante el desarrollo, en la VM de 2 núcleos)_:
 
 | Mandadas | Aceptadas | Rechazadas con 503 | Total | Espera en cola (prom.) |
 |--:|--:|--:|--:|--:|
@@ -632,7 +653,7 @@ Dos ejemplos desarrollados:
 > **La medición 2 es la clase 18 hecha número.** En la clase 18 vimos que `time.sleep`
 > dentro de una corrutina congela el scheduler cooperativo, porque la corrutina nunca
 > devuelve el control. Un `for` de 5 millones de hashes es lo mismo: no hay `yield`/`await`
-> en el medio. Medido, el servidor pasó de responder en 3,5 ms a responder en 3500 ms.
+> en el medio. Medido, el servidor pasó de responder en 2,1 ms a responder en 1600 ms.
 
 ---
 
@@ -666,7 +687,9 @@ Dos ejemplos desarrollados:
 ---
 
 ## 7. Lo que aprendí
-[ME TENGO QUE ACORDAR DE COMPLETAR ESTO XD]
+En este proyecto pude implementar los conceptos vistos en las últimas clases, los cuales a pesar de que estaban perfectamente bien explicados, en este trabajo pude entender de mejor forma cómo se manejan principalmente async y await (para dar una idea, capaz de colgada no me había dado cuenta de que estaban estrechamente relacionados y a veces me frustraba porque no entendía cuándo usar uno y cuándo el otro). Me costó un poco entender algunas cosas de lo que se pedía en el trabajo y luego de un poco de investigación y discusiones con mi amigo Claude, terminé de entender que era similar a una lavandería, donde se puede dejar la ropa y luego ir consultando cómo va el proceso (el lavado).
+
+Pude entender mejor la diferencia entre asyncio y el multiprocessing, ya que para mí eran cosas sumamente similares en cuanto al concepto. Aprendí que usar multiprocessing en casos donde conviene mil veces usar asyncio por la espera que conlleva sería tan ineficiente como contratar a un atleta olímpico para que haga la fila del banco: puedo mandar al que quiera y decido mandar al pobre pibe que debería estar entrenando. Y al revés también: en la medición 2 vi que un solo cálculo pesado dentro del event loop dejó al servidor 1,6 segundos sin responder, contra 2,1 ms cuando lo mandé a otro proceso.
 
 ---
 
