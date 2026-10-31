@@ -130,7 +130,9 @@ son la lista de cosas que el sistema garantiza.
 ### "Mostrame dónde tu código podría bloquear el event loop."
 
 En `hashear.py`, el modo `directo`: llama a `hash_iterado` sin executor. Es a propósito,
-para la medición 2. Fuera de eso, revisé: no hay `time.sleep`, no uso `requests`, el
+para la medición 2, y está **deshabilitado por defecto**: `POST` responde `403` salvo que
+el servidor arranque con `PERMITIR_MODO_DIRECTO=1` (el chequeo está en `crear_tarea`,
+en `main.py`). Fuera de eso, revisé: no hay `time.sleep`, no uso `requests`, el
 volcado JSON y el `pool.shutdown` van con `asyncio.to_thread`. Lo único que podría
 pesar es `/estadisticas` con millones de tareas, porque recorre el dict entero (es O(n)).
 

@@ -172,6 +172,14 @@ async def test_filtro_y_estadisticas(cliente):
     assert 'tareas_total{estado="completada"} 1' in (await cliente.get('/metrics')).text
 
 
+async def test_modo_directo_deshabilitado_por_defecto(cliente):
+    r = await cliente.post('/tareas', json={
+        'tipo': 'hashear',
+        'parametros': {'texto': 'x', 'iteraciones': 10, 'modo': 'directo'}})
+    assert r.status_code == 403
+    assert (await cliente.get('/tareas')).json() == []     # no se creó nada
+
+
 async def test_cola_llena_devuelve_503(cliente):
     motor = cliente.app.state.motor
     motor.cola = asyncio.Queue(maxsize=1)      # cola diminuta para el test

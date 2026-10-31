@@ -39,7 +39,8 @@ class ParamsHashear(BaseModel):
         default='proceso',
         description="'proceso' (por defecto, ProcessPoolExecutor), 'thread' "
                     "(asyncio.to_thread) o 'directo' (en el event loop: lo "
-                    "BLOQUEA, existe solo para la medición 2)")
+                    "BLOQUEA, existe solo para la medición 2 y requiere "
+                    "PERMITIR_MODO_DIRECTO=1)")
 
 
 class ParamsEsperar(BaseModel):

@@ -128,6 +128,14 @@ async def raiz():
 @app.post('/tareas', response_model=TareaSalida, status_code=202)
 async def crear_tarea(nueva: TareaNueva, request: Request, response: Response):
     """Encola y responde YA. 202 Accepted = "lo recibí, lo voy a hacer"."""
+    # El modo 'directo' congela el servidor entero: solo se acepta si se
+    # habilitó explícitamente para medir (PERMITIR_MODO_DIRECTO=1).
+    if (nueva.tipo == 'hashear' and nueva.parametros.modo == 'directo'
+            and not request.app.state.config.permitir_modo_directo):
+        raise HTTPException(
+            status_code=403,
+            detail="El modo 'directo' bloquea el event loop y está deshabilitado. "
+                   "Para la medición 2, arrancar con PERMITIR_MODO_DIRECTO=1")
     try:
         t = _motor(request).encolar(nueva.tipo,
                                     nueva.parametros.model_dump(mode='json'),

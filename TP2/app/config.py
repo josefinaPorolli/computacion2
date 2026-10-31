@@ -52,6 +52,11 @@ class Config:
     max_bytes_descarga: int = field(
         default_factory=lambda: _entero('MAX_BYTES_DESCARGA', 50 * 1024 * 1024))
 
+    # Habilita `hashear` con modo 'directo' (bloquea el event loop A PROPÓSITO).
+    # Apagado por defecto: solo se prende para correr la medición 2.
+    permitir_modo_directo: bool = field(
+        default_factory=lambda: os.environ.get('PERMITIR_MODO_DIRECTO', '0') == '1')
+
     # Timeout de red de cada pedido HTTP individual, en segundos.
     timeout_http: float = field(
         default_factory=lambda: _real('TIMEOUT_HTTP', 15.0))

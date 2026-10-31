@@ -12,6 +12,10 @@ midiendo cuánto tarda cada respuesta.
   - proceso : run_in_executor con ProcessPoolExecutor. El cálculo corre en
               otro proceso, con su propio GIL: el loop queda libre.
 
+El modo 'directo' está deshabilitado por defecto (la API responde 403),
+así que para esta medición hay que levantar el servidor con:
+    PERMITIR_MODO_DIRECTO=1 docker compose up --build
+
 Uso:
     python mediciones/medir_bloqueo.py
     python mediciones/medir_bloqueo.py --iteraciones 8000000
@@ -19,6 +23,8 @@ Uso:
 import argparse
 import asyncio
 import statistics
+
+import httpx
 
 from comun import FINALES, ahora, cliente, crear
 
@@ -42,8 +48,13 @@ async def main(args):
     async with cliente(args.api) as c:
         await c.get('/tareas')                       # calentar la conexión
         for modo in args.modos:
-            tid = await crear(c, 'hashear', timeout=600, texto='computacion2',
-                              iteraciones=args.iteraciones, modo=modo)
+            try:
+                tid = await crear(c, 'hashear', timeout=600, texto='computacion2',
+                                  iteraciones=args.iteraciones, modo=modo)
+            except httpx.HTTPStatusError as e:
+                print(f'  {modo:<9}rechazado ({e.response.status_code}): '
+                      f'{e.response.json()["detail"]}')
+                continue
             lat, t = await sondear(c, tid, args.cada)
             p95 = statistics.quantiles(lat, n=20)[-1] if len(lat) >= 2 else lat[0]
             print(f'  {modo:<9}{t["duracion"]:>7.2f}s{len(lat):>7}'

@@ -10,6 +10,8 @@ services:
       TIMEOUT_DEFECTO: "60"
       GRACIA_APAGADO: "10"
       DIR_VOLCADOS: "/app/volcados"
+      # Solo para la medición 2: PERMITIR_MODO_DIRECTO=1 docker compose up --build
+      PERMITIR_MODO_DIRECTO: "${PERMITIR_MODO_DIRECTO:-0}"
     volumes:
       - ./volcados:/app/volcados   # los estado_<timestamp>.json quedan en el host
     # Más que GRACIA_APAGADO: si no, Docker manda SIGKILL antes del volcado

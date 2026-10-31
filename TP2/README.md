@@ -1,7 +1,7 @@
 # TP2 — Plataforma de Tareas Distribuidas
 
 **Computación II — Universidad de Mendoza — 2026**
-Alumno: _(tu nombre y legajo)_
+Alumno: Josefina Porolli Serpa (64133)
 
 Un servicio HTTP al que se le encargan trabajos, que los ejecuta de forma concurrente
 y permite consultar su estado y resultado. Está hecho con **FastAPI**, una
@@ -83,6 +83,7 @@ python -m app.main                # API en :8000
 | `GRACIA_APAGADO` | 10 | Cuánto se espera a las tareas en curso al apagar (s) |
 | `HASH_BLOQUE` | 100000 | Iteraciones por bloque mandado al executor |
 | `DESCARGAS_SIMULTANEAS` | 20 | Descargas a la vez dentro de una tarea |
+| `PERMITIR_MODO_DIRECTO` | 0 | `1` habilita `hashear` en modo `directo` (bloquea el loop; solo para la medición 2) |
 
 ### Ejemplos con `curl`
 
@@ -125,7 +126,7 @@ websocat ws://localhost:8000/eventos             # o cualquier cliente WebSocket
 
 | Método | Ruta | Respuestas |
 |--------|------|-----------|
-| `POST` | `/tareas` | `202` encolada · `422` cuerpo inválido · `503` cola llena o apagándose |
+| `POST` | `/tareas` | `202` encolada · `403` modo `directo` deshabilitado · `422` cuerpo inválido · `503` cola llena o apagándose |
 | `GET` | `/tareas?estado=&limite=&id_desde=` | `200` lista (filtro y paginación opcionales) |
 | `GET` | `/tareas/{id}` | `200` · `404` |
 | `DELETE` | `/tareas/{id}` | `200` con el estado final · `404` · `409` si ya había terminado |
@@ -140,7 +141,7 @@ pip install -r requirements-dev.txt
 pytest -v
 ```
 
-14 tests con `pytest-asyncio` (bonus): que el POST no espere, las tres tareas, la
+15 tests con `pytest-asyncio` (bonus): que el POST no espere, las tres tareas, la
 concurrencia de descargas, cancelación de pendientes y en ejecución (incluida a
 mitad de descarga y a mitad de hash), timeouts, excepciones, cola llena, que el hash
 no bloquee la API, y el apagado con volcado. Pasan en Python 3.11, 3.12 y 3.13.
@@ -287,7 +288,9 @@ También revisé todo el código buscando **otras** cosas que bloqueen el loop:
 | Resolución DNS (`getaddrinfo` es bloqueante en el SO) | httpx/anyio usan `loop.getaddrinfo`, que la corre en un thread |
 
 El único bloqueo que queda es **a propósito**: `hashear` con `"modo": "directo"`,
-que existe solo para la medición 2.
+que existe solo para la medición 2. Está **deshabilitado por defecto**: la API lo
+rechaza con `403` salvo que el servidor se arranque con `PERMITIR_MODO_DIRECTO=1`.
+Así ningún cliente puede congelar el servidor en una instalación normal.
 
 ### ¿Cómo implementé la cancelación, y qué pasa con los recursos a medio usar?
 
@@ -431,8 +434,10 @@ de uvicorn como red de seguridad.
 > ```bash
 > pip install httpx
 > python mediciones/medir_io.py
-> python mediciones/medir_bloqueo.py
 > python mediciones/medir_techo.py
+> # la 2 necesita el modo directo habilitado:
+> docker compose down && PERMITIR_MODO_DIRECTO=1 docker compose up --build -d
+> python mediciones/medir_bloqueo.py
 > ```
 
 ### Medición 1 — Concurrencia I/O: 20 descargas secuenciales vs. concurrentes
@@ -648,8 +653,10 @@ Dos ejemplos desarrollados:
   modo `thread`: un thread no se puede matar.
 - **El timeout cuenta desde que la tarea arranca**, no desde que se encola: una tarea
   puede pasar mucho tiempo en la cola sin que venza.
-- **Los modos `directo` y `thread` de `hashear` existen solo para medir**. En producción
-  `directo` no debería estar expuesto: cualquiera podría congelar el servidor.
+- **Los modos `directo` y `thread` de `hashear` existen solo para medir**. `directo`
+  está deshabilitado por defecto (`403`); si alguien arranca el servidor con
+  `PERMITIR_MODO_DIRECTO=1`, cualquier cliente puede congelarlo. `thread` no bloquea,
+  pero es más lento que `proceso` por el GIL.
 - **`descargar` baja cualquier URL**, incluidas direcciones internas de la red donde
   corre (riesgo de SSRF). No hay autenticación ni límite por cliente.
 - **El WebSocket descarta eventos** para un cliente que no lee (su cola llega a 1000):
@@ -663,19 +670,7 @@ Dos ejemplos desarrollados:
 ---
 
 ## 7. Lo que aprendí
-
-> ✍️ **Esta sección la tenés que escribir vos, con tus palabras** (la consigna pide
-> 2-3 párrafos *personales*). Algunas preguntas para arrancar:
->
-> - ¿Qué te sorprendió de la medición 2? ¿Te imaginabas que un solo `for` dejara al
->   servidor sin responder 3,5 segundos?
-> - ¿Qué entendiste ahora sobre la diferencia entre I/O-bound y CPU-bound que antes
->   no tenías claro? ¿Por qué asyncio resuelve uno y no el otro?
-> - ¿Qué fue lo más difícil de entender: la cancelación (quién cancela a quién), el
->   apagado ordenado, el GIL...?
-> - La medición 3: ¿qué aprendiste de que el que se saturaba era el cliente y no el servidor?
-> - ¿Cómo se conectan las clases 11 (productor-consumidor), 17 (epoll), 18 (corrutinas)
->   y 21 (Queue) en este TP?
+[ME TENGO QUE ACORDAR DE COMPLETAR ESTO XD]
 
 ---
 
@@ -685,7 +680,7 @@ Dos ejemplos desarrollados:
 |--|--|
 | **WebSocket `/eventos`** | `app/main.py` (`eventos`) y `app/eventos.py`: notifica cada cambio de estado |
 | **Métricas Prometheus** | `GET /metrics`, formato de exposición escrito a mano |
-| **Tests con `pytest-asyncio`**, especialmente de cancelación | `tests/`: 14 tests, 4 de cancelación (pendiente, en ejecución, a mitad de descarga, a mitad de hash) + timeout + apagado |
+| **Tests con `pytest-asyncio`**, especialmente de cancelación | `tests/`: 15 tests, 4 de cancelación (pendiente, en ejecución, a mitad de descarga, a mitad de hash) + timeout + apagado |
 
 ---
 
