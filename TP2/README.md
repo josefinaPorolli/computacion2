@@ -393,8 +393,8 @@ Tiene que ser mayor que `GRACIA_APAGADO` + el tiempo del volcado.
 Al arrancar, si hay un volcado previo, se reporta por log:
 
 ```
-INFO app: volcado previo encontrado: volcados/estado_20261029_172612.json (2026-10-29T17:26:12,
-          15101 tareas, por estado: {'pendiente': 0, 'ejecutando': 0, 'completada': 15101,
+INFO app: volcado previo encontrado: /app/volcados/estado_20261031_184740.json (2026-10-31T18:47:40,
+          155 tareas, por estado: {'pendiente': 0, 'ejecutando': 0, 'completada': 155,
           'fallida': 0, 'cancelada': 0})
 ```
 
@@ -435,9 +435,8 @@ de uvicorn como red de seguridad.
 > máquina (Python 3.12, fuera de Docker). Los resultados crudos están en
 > `mediciones/resultados/`.
 >
-> Excepción: la prueba con 2000 workers (3A), la de 10.000 tareas (3C) y el extra del
-> tamaño de bloque se midieron durante el desarrollo en una VM Linux de 2 núcleos; están
-> marcadas en cada caso.
+> Excepción: la prueba con 2000 workers (3A) y el extra del tamaño de bloque se midieron
+> durante el desarrollo en una VM Linux de 2 núcleos; están marcadas en cada caso.
 >
 > **Para repetirlas**, con `docker compose up --build` corriendo:
 >
@@ -598,16 +597,15 @@ workers por encima de los núcleos no acelera el CPU-bound; ahí el techo lo pon
 
 #### 3C. "Si te mando 10.000 tareas de golpe, ¿qué se rompe primero?"
 
-Lo probé con 3000 tareas `esperar` de 0,1 s, la config por defecto (4 workers, `COLA_MAX=1000`)
-_(medido durante el desarrollo, en la VM de 2 núcleos)_:
+Lo probé con 3000 tareas `esperar` de 0,1 s, la config por defecto (4 workers, `COLA_MAX=1000`):
 
 | Mandadas | Aceptadas | Rechazadas con 503 | Total | Espera en cola (prom.) |
 |--:|--:|--:|--:|--:|
-| 3000 | 1465 | **1535** | 37,2 s | 12,9 s |
+| 3000 | 1308 | **1692** | 33,2 s | 13,0 s |
 
 Lo primero que salta es la **cola** (a propósito): se llena con 1000, y lo que llega
-después recibe `503` con `Retry-After: 1`. Las 465 aceptadas de más son las que los
-workers fueron sacando mientras llegaban los POST (40 por segundo, durante ~12 s). Sin
+después recibe `503` con `Retry-After: 1`. Las 308 aceptadas de más son las que los
+workers fueron sacando mientras llegaban los POST (40 por segundo, durante ~7,9 s). Sin
 `maxsize`, la cola aceptaría todo y la espera en cola (y la memoria) crecerían sin
 límite: con 10.000 tareas de 1 s y 4 workers, la última esperaría 41 minutos.
 

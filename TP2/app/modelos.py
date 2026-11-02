@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field, HttpUrl
 
 
-class Estado(str, Enum):
+class Estado(str, Enum): # Estados posibles de una tarea
     PENDIENTE = 'pendiente'
     EJECUTANDO = 'ejecutando'
     COMPLETADA = 'completada'
