@@ -726,6 +726,5 @@ Pude entender mejor la diferencia entre asyncio y el multiprocessing, ya que par
 ├── docker-compose.yml
 ├── requirements.txt       # lo que necesita la API
 ├── requirements-dev.txt   # + pytest, para tests y mediciones
-├── GUIA_DE_ESTUDIO.md     # recorrido por el código y preguntas de la corrección
 └── README.md
 ```
